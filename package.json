@@ -1,0 +1,46 @@
+{
+  "name": "dsh-session-toast",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/waddlechef/dsh-session-toast.git"
+  },
+  "homepage": "https://github.com/waddlechef/dsh-session-toast#readme",
+  "bugs": {
+    "url": "https://github.com/waddlechef/dsh-session-toast/issues"
+  },
+  "description": "Session completion notifications for DeepSeek Harness: an in-app notice, a short chime, and a settings page. · 会话完成通知：应用内提示条、提示音与设置页。",
+  "type": "module",
+  "icon": "icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  }
+}

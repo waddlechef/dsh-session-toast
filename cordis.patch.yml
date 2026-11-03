@@ -1,0 +1,5 @@
+# Inserts the session-completion notifier: the Host half serves the summary
+# route, the Client half renders notices, plays the chime and owns the page.
+- insert:
+    - id: dsh-session-toast
+      name: 'dsh-session-toast'

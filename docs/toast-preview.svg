@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="412" height="180" viewBox="0 0 412 180" role="img" aria-label="dsh-session-toast test notification card">
+  <defs>
+    <filter id="cardShadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.10"/>
+    </filter>
+    <clipPath id="cardClip"><rect x="16" y="20" width="380" height="140" rx="10"/></clipPath>
+  </defs>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif">
+    <rect x="16" y="20" width="380" height="140" rx="10" fill="#ffffff" stroke="#0000001a" stroke-width="1" filter="url(#cardShadow)"/>
+    <g transform="translate(28,34)" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3.3 8.5l3.1 3.1 6.3-7.2"/>
+    </g>
+    <text x="52" y="46" font-size="13" font-weight="600" fill="#0f1115">测试通知</text>
+    <text x="28" y="72" font-size="12.5" fill="#61666b">能看到这条，说明通知和声音都正常。</text>
+    <text x="28" y="143" font-size="11" fill="#61666b" fill-opacity="0.6">12:00</text>
+    <g clip-path="url(#cardClip)">
+      <rect x="16" y="158" width="380" height="2" fill="#22c55e" opacity="0.5"/>
+    </g>
+  </g>
+</svg>
