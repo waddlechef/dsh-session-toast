@@ -1164,6 +1164,29 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function SettingsIcon(props) {
+      var size = props && typeof props.size === 'number' ? props.size : 16
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 16 16',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.4,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          'aria-hidden': 'true',
+          focusable: 'false',
+        },
+        h('path', {
+          d: 'M8 2.6c-2.3 0-4.1 1.8-4.1 4.1v2.6c0 .7-.3 1.4-.8 1.9l-.6.7c-.4.4-.1 1.1.5 1.1h10c.6 0 .9-.7.5-1.1l-.6-.7c-.5-.5-.8-1.2-.8-1.9V6.7c0-2.3-1.8-4.1-4.1-4.1z',
+        }),
+        h('path', { d: 'M6.6 13.1a1.4 1.4 0 0 0 2.8 0' }),
+      )
+    }
+
     function createSettingsPage(deps) {
       return function SettingsPage() {
         var settings = useStore(deps.settingsSource)
@@ -1499,6 +1522,10 @@ window.__ModuleLoader__.load({
             },
             SettingsPage,
           )
+          return typeof off === 'function' ? off : function () {}
+        })
+        ctx.slots.inject('settings.section.icon', function () {
+          var off = ctx.slots.register({ name: 'settings.section.icon', id: SETTINGS_SECTION_ID }, SettingsIcon)
           return typeof off === 'function' ? off : function () {}
         })
       }
