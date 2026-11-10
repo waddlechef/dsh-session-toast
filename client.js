@@ -21,6 +21,9 @@ window.__ModuleLoader__.load({
         nav: 'Session notifications',
         title: 'Session notifications',
         subtitle: 'Get a notice when a session finishes a reply; failures look different.',
+        groupGeneral: 'General',
+        groupAppearance: 'Appearance',
+        groupSound: 'Sound',
         enable: 'Enable notifications',
         enableHint: 'Turn off to stop all notices.',
         sound: 'Play a sound',
@@ -68,6 +71,9 @@ window.__ModuleLoader__.load({
         nav: '会话通知',
         title: '会话通知',
         subtitle: '会话回复结束时提醒你；失败会单独提示。',
+        groupGeneral: '常规',
+        groupAppearance: '外观',
+        groupSound: '声音',
         enable: '启用通知',
         enableHint: '关闭后不再提醒。',
         sound: '播放提示音',
@@ -1108,6 +1114,27 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function settingsGroup(title, rows) {
+      return h(
+        'section',
+        { style: { display: 'flex', flexDirection: 'column', padding: '0 0 20px' } },
+        h(
+          'h3',
+          {
+            style: {
+              fontSize: '12px',
+              fontWeight: 600,
+              letterSpacing: '0.02em',
+              color: 'var(--dsw-alias-label-secondary)',
+              margin: '0 0 2px',
+            },
+          },
+          title,
+        ),
+        rows,
+      )
+    }
+
     function sizeControl(label, value, min, max, step, onChange, suffix) {
       return h(
         'div',
@@ -1211,52 +1238,85 @@ window.__ModuleLoader__.load({
           playChime('ok')
         }
 
-        return h(
-          'div',
-          { style: { display: 'flex', flexDirection: 'column', maxWidth: '640px', padding: '4px 4px 32px' } },
-          h('h2', { style: { fontSize: '16px', fontWeight: 600, margin: '0 0 4px' } }, t('title')),
-          h(
-            'p',
-            {
-              style: {
-                fontSize: '13px',
-                color: 'var(--dsw-alias-label-secondary)',
-                lineHeight: 1.6,
-                margin: '0 0 12px',
-              },
+        var enableRow = settingRow(
+          t('enable'),
+          t('enableHint'),
+          h(Switch, {
+            checked: settings.enabled,
+            label: t('enable'),
+            onChange: function (next) {
+              update({ enabled: next })
             },
-            t('subtitle'),
-          ),
-          settingRow(
-            t('enable'),
-            t('enableHint'),
-            h(Switch, {
-              checked: settings.enabled,
-              label: t('enable'),
-              onChange: function (next) {
-                update({ enabled: next })
+          }),
+        )
+        var dndRow = settingRow(
+          t('dnd'),
+          t('dndHint'),
+          h(Switch, {
+            checked: settings.dnd.enabled,
+            label: t('dnd'),
+            onChange: function (next) {
+              update({ dnd: { enabled: next } })
+            },
+          }),
+        )
+        var dndTimes = settings.dnd.enabled
+          ? h(
+              'div',
+              {
+                style: {
+                  display: 'flex',
+                  gap: '12px',
+                  alignItems: 'center',
+                  padding: '0 0 14px',
+                  borderTop: '1px solid var(--dsw-alias-border-l1)',
+                  paddingTop: '13px',
+                },
               },
+              timeField(t('dndFrom'), settings.dnd.start, function (next) {
+                update({ dnd: { start: next } })
+              }),
+              timeField(t('dndTo'), settings.dnd.end, function (next) {
+                update({ dnd: { end: next } })
+              }),
+            )
+          : null
+        var defaultsRow = settingRow(
+          t('defaults'),
+          flash[0] || t('defaultsHint'),
+          h(
+            'div',
+            { style: { display: 'flex', alignItems: 'center', gap: '8px', flex: '0 0 auto' } },
+            actionButton(t('saveDefault'), function () {
+              saveUserDefaults(settings)
+              showFlash(t('saveDefaultDone'))
+            }),
+            actionButton(t('resetDefault'), function () {
+              update(defaultSettings())
+              showFlash(t('resetDefaultDone'))
             }),
           ),
-          settingRow(
-            t('sound'),
-            t('soundHint'),
-            h(Switch, {
-              checked: settings.sound,
-              label: t('sound'),
-              onChange: function (next) {
-                update({ sound: next })
-                if (next) playChime('ok')
-              },
-            }),
-          ),
-          settingRow(
-            t('volume'),
-            t('volumeHint'),
-            sizeControl(t('volume'), settings.volume, MIN_VOLUME, MAX_VOLUME, 5, function (next) {
-              update({ volume: next })
-            }, '%'),
-          ),
+        )
+        var soundRow = settingRow(
+          t('sound'),
+          t('soundHint'),
+          h(Switch, {
+            checked: settings.sound,
+            label: t('sound'),
+            onChange: function (next) {
+              update({ sound: next })
+              if (next) playChime('ok')
+            },
+          }),
+        )
+        var volumeRow = settingRow(
+          t('volume'),
+          t('volumeHint'),
+          sizeControl(t('volume'), settings.volume, MIN_VOLUME, MAX_VOLUME, 5, function (next) {
+            update({ volume: next })
+          }, '%'),
+        )
+        var appearanceRows = [
           settingRow(
             t('width'),
             t('widthHint'),
@@ -1299,104 +1359,77 @@ window.__ModuleLoader__.load({
               update({ offsetRight: next })
             }),
           ),
-          settingRow(
-            t('dnd'),
-            t('dndHint'),
-            h(Switch, {
-              checked: settings.dnd.enabled,
-              label: t('dnd'),
-              onChange: function (next) {
-                update({ dnd: { enabled: next } })
-              },
-            }),
-          ),
-          settings.dnd.enabled
-            ? h(
-                'div',
-                {
-                  style: {
-                    display: 'flex',
-                    gap: '12px',
-                    alignItems: 'center',
-                    padding: '0 0 14px',
-                    borderTop: '1px solid var(--dsw-alias-border-l1)',
-                    paddingTop: '13px',
-                  },
-                },
-                timeField(t('dndFrom'), settings.dnd.start, function (next) {
-                  update({ dnd: { start: next } })
-                }),
-                timeField(t('dndTo'), settings.dnd.end, function (next) {
-                  update({ dnd: { end: next } })
-                }),
-              )
-            : null,
-          settingRow(
-            t('defaults'),
-            flash[0] || t('defaultsHint'),
+        ]
+        var testRow = h(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              padding: '13px 0',
+              borderTop: '1px solid var(--dsw-alias-border-l1)',
+            },
+          },
+          h(
+            'div',
+            { style: { flex: '1 1 auto', minWidth: 0 } },
+            h('div', { style: { fontSize: '13px', fontWeight: 500 } }, t('test')),
             h(
               'div',
-              { style: { display: 'flex', alignItems: 'center', gap: '8px', flex: '0 0 auto' } },
-              actionButton(t('saveDefault'), function () {
-                saveUserDefaults(settings)
-                showFlash(t('saveDefaultDone'))
-              }),
-              actionButton(t('resetDefault'), function () {
-                update(defaultSettings())
-                showFlash(t('resetDefaultDone'))
-              }),
+              {
+                style: {
+                  fontSize: '12px',
+                  color: 'var(--dsw-alias-label-secondary)',
+                  lineHeight: 1.5,
+                  marginTop: '2px',
+                },
+              },
+              t('testHint'),
             ),
           ),
           h(
-            'div',
+            'button',
             {
+              type: 'button',
+              onClick: testNotification,
               style: {
-                display: 'flex',
-                alignItems: 'center',
-                gap: '16px',
-                padding: '13px 0',
-                borderTop: '1px solid var(--dsw-alias-border-l1)',
+                appearance: 'none',
+                flex: '0 0 auto',
+                border: 0,
+                cursor: 'pointer',
+                padding: '7px 14px',
+                borderRadius: '9px',
+                background: 'var(--dsw-alias-brand-primary)',
+                color: '#ffffff',
+                font: 'inherit',
+                fontSize: '13px',
+                fontWeight: 500,
               },
             },
-            h(
-              'div',
-              { style: { flex: '1 1 auto', minWidth: 0 } },
-              h('div', { style: { fontSize: '13px', fontWeight: 500 } }, t('test')),
-              h(
-                'div',
-                {
-                  style: {
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                    lineHeight: 1.5,
-                    marginTop: '2px',
-                  },
-                },
-                t('testHint'),
-              ),
-            ),
-            h(
-              'button',
-              {
-                type: 'button',
-                onClick: testNotification,
-                style: {
-                  appearance: 'none',
-                  flex: '0 0 auto',
-                  border: 0,
-                  cursor: 'pointer',
-                  padding: '7px 14px',
-                  borderRadius: '9px',
-                  background: 'var(--dsw-alias-brand-primary)',
-                  color: '#ffffff',
-                  font: 'inherit',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                },
-              },
-              t('test'),
-            ),
+            t('test'),
           ),
+        )
+
+        return h(
+          'div',
+          { style: { display: 'flex', flexDirection: 'column', maxWidth: '640px', padding: '4px 4px 32px' } },
+          h('h2', { style: { fontSize: '16px', fontWeight: 600, margin: '0 0 4px' } }, t('title')),
+          h(
+            'p',
+            {
+              style: {
+                fontSize: '13px',
+                color: 'var(--dsw-alias-label-secondary)',
+                lineHeight: 1.6,
+                margin: '0 0 8px',
+              },
+            },
+            t('subtitle'),
+          ),
+          settingsGroup(t('groupGeneral'), [enableRow, dndRow, dndTimes, testRow]),
+          settingsGroup(t('groupAppearance'), appearanceRows.concat([defaultsRow])),
+          settingsGroup(t('groupSound'), [soundRow, volumeRow]),
         )
       }
     }
