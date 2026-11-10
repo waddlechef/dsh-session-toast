@@ -25,6 +25,8 @@ window.__ModuleLoader__.load({
         enableHint: 'Turn off to stop all notices.',
         sound: 'Play a sound',
         soundHint: 'A chime on completion; failures use another tone.',
+        volume: 'Volume',
+        volumeHint: 'Chime volume, 0–200%; 0 mutes it, 100% is the default loudness.',
         width: 'Notice width',
         widthHint: 'Card width in pixels.',
         height: 'Notice height',
@@ -70,6 +72,8 @@ window.__ModuleLoader__.load({
         enableHint: '关闭后不再提醒。',
         sound: '播放提示音',
         soundHint: '完成时播放提示音，失败音调不同。',
+        volume: '音量',
+        volumeHint: '提示音音量，0–200%；0 为静音，100% 为默认响度。',
         width: '通知宽度',
         widthHint: '通知卡宽度，单位像素。',
         height: '通知高度',
@@ -157,12 +161,16 @@ window.__ModuleLoader__.load({
     var MIN_SHADOW = 0
     var MAX_SHADOW = 32
     var DEFAULT_SHADOW = 8
+    var MIN_VOLUME = 0
+    var MAX_VOLUME = 200
+    var DEFAULT_VOLUME = 100
 
     function builtinSettings() {
       return {
         version: 2,
         enabled: true,
         sound: true,
+        volume: DEFAULT_VOLUME,
         width: DEFAULT_WIDTH,
         height: DEFAULT_HEIGHT,
         radius: DEFAULT_RADIUS,
@@ -224,6 +232,7 @@ window.__ModuleLoader__.load({
         version: 2,
         enabled: raw.enabled !== false,
         sound: raw.sound !== false,
+        volume: clampNumber(raw.volume, fallback.volume, MIN_VOLUME, MAX_VOLUME),
         width: clampNumber(raw.width, fallback.width, MIN_WIDTH, MAX_WIDTH),
         height: clampNumber(raw.height, fallback.height, MIN_HEIGHT, MAX_HEIGHT),
         radius: clampNumber(raw.radius, fallback.radius, MIN_RADIUS, MAX_RADIUS),
@@ -259,6 +268,8 @@ window.__ModuleLoader__.load({
         value = defaultSettings()
       }
 
+      audioVolume = value.volume / 100
+
       try {
         if (readUserDefaults() === null && window.localStorage.getItem(STORAGE_KEY) !== null) {
           saveUserDefaults(value)
@@ -281,6 +292,7 @@ window.__ModuleLoader__.load({
           var next = Object.assign({}, value, patch || {})
           if (patch && patch.dnd) next.dnd = Object.assign({}, value.dnd, patch.dnd)
           value = normalizeSettings(next)
+          audioVolume = value.volume / 100
           try {
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
           } catch (error) {
@@ -376,6 +388,7 @@ window.__ModuleLoader__.load({
     }
 
     var audioState = { ctx: null }
+    var audioVolume = DEFAULT_VOLUME / 100
 
     function audioContext() {
       if (audioState.ctx !== null) return audioState.ctx
@@ -407,33 +420,47 @@ window.__ModuleLoader__.load({
       if (!ctx) return
       if (ctx.state !== 'running') primeAudio()
       if (ctx.state !== 'running') return
+      if (!(audioVolume > 0)) return
       try {
+        var peak = (kind === 'error' ? 0.09 : 0.06) * audioVolume
+        var harmonicPeak = peak * 0.32
         var tones =
           kind === 'error'
             ? [
-                [392, 0],
-                [311.13, 0.17],
+                [1046.5, 0],
+                [783.99, 0.16],
               ]
             : [
-                [783.99, 0],
-                [1046.5, 0.14],
+                [1174.66, 0],
+                [1567.98, 0.13],
               ]
         var base = ctx.currentTime + 0.01
         for (var index = 0; index < tones.length; index += 1) {
           var frequency = tones[index][0]
           var offset = tones[index][1]
+          var start = base + offset
           var oscillator = ctx.createOscillator()
           var gain = ctx.createGain()
-          var start = base + offset
           oscillator.type = 'sine'
           oscillator.frequency.value = frequency
           gain.gain.setValueAtTime(0.0001, start)
-          gain.gain.exponentialRampToValueAtTime(kind === 'error' ? 0.09 : 0.06, start + 0.02)
-          gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22)
+          gain.gain.exponentialRampToValueAtTime(peak, start + 0.015)
+          gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.26)
           oscillator.connect(gain)
           gain.connect(ctx.destination)
           oscillator.start(start)
-          oscillator.stop(start + 0.24)
+          oscillator.stop(start + 0.28)
+          var harmonic = ctx.createOscillator()
+          var harmonicGain = ctx.createGain()
+          harmonic.type = 'sine'
+          harmonic.frequency.value = frequency * 2
+          harmonicGain.gain.setValueAtTime(0.0001, start)
+          harmonicGain.gain.exponentialRampToValueAtTime(harmonicPeak, start + 0.015)
+          harmonicGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.24)
+          harmonic.connect(harmonicGain)
+          harmonicGain.connect(ctx.destination)
+          harmonic.start(start)
+          harmonic.stop(start + 0.26)
         }
       } catch (error) {
 
@@ -1081,7 +1108,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function sizeControl(label, value, min, max, step, onChange) {
+    function sizeControl(label, value, min, max, step, onChange, suffix) {
       return h(
         'div',
         { style: { display: 'flex', alignItems: 'center', gap: '10px', flex: '0 0 auto' } },
@@ -1108,7 +1135,7 @@ window.__ModuleLoader__.load({
               fontVariantNumeric: 'tabular-nums',
             },
           },
-          value + ' px',
+          value + (typeof suffix === 'string' ? suffix : ' px'),
         ),
       )
     }
@@ -1199,6 +1226,13 @@ window.__ModuleLoader__.load({
                 if (next) playChime('ok')
               },
             }),
+          ),
+          settingRow(
+            t('volume'),
+            t('volumeHint'),
+            sizeControl(t('volume'), settings.volume, MIN_VOLUME, MAX_VOLUME, 5, function (next) {
+              update({ volume: next })
+            }, '%'),
           ),
           settingRow(
             t('width'),
