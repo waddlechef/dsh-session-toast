@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Session Notifications",
-    "description": "An in-app notice and a short chime when a session finishes a reply, with failure styling, do-not-disturb hours and a settings page."
+    "description": "Session completion notifications for DeepSeek Harness: an in-app notice, a short chime, and a settings page."
   }
 }
