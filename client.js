@@ -34,14 +34,8 @@ window.__ModuleLoader__.load({
         widthHint: 'Card width in pixels.',
         height: 'Notice height',
         heightHint: 'Card height in pixels. Small values hide the excerpt first.',
-        radius: 'Corner radius',
-        radiusHint: 'Card corner radius in pixels.',
-        shadow: 'Shadow radius',
-        shadowHint: 'Card shadow radius in pixels. 0 removes it.',
-        offsetBottom: 'Bottom margin',
-        offsetBottomHint: 'Distance from the window bottom, in pixels.',
-        offsetRight: 'Right margin',
-        offsetRightHint: 'Distance from the window right edge, in pixels.',
+        offsetBottom: 'Bottom gap',
+        offsetBottomHint: 'Distance above the composer card, in pixels; 0 sits right on its top edge.',
         dnd: 'Do not disturb',
         dndHint: 'No notices during this daily window.',
         dndFrom: 'From',
@@ -84,14 +78,8 @@ window.__ModuleLoader__.load({
         widthHint: '通知卡宽度，单位像素。',
         height: '通知高度',
         heightHint: '通知卡高度，单位像素。太小时先隐藏摘要。',
-        radius: '圆角半径',
-        radiusHint: '卡片圆角半径，单位像素。',
-        shadow: '阴影半径',
-        shadowHint: '卡片阴影半径，单位像素。0 为无阴影。',
-        offsetBottom: '底部边距',
-        offsetBottomHint: '通知与窗口底部的距离，单位像素。',
-        offsetRight: '右侧边距',
-        offsetRightHint: '通知与窗口右侧的距离，单位像素。',
+        offsetBottom: '底部间距',
+        offsetBottomHint: '通知与输入框顶部的距离，单位像素；0 为紧贴输入框顶部，数值越大越往上。',
         dnd: '免打扰',
         dndHint: '该时间段内不提醒。',
         dndFrom: '开始',
@@ -159,30 +147,20 @@ window.__ModuleLoader__.load({
     var MAX_HEIGHT = 320
     var MIN_OFFSET = 0
     var MAX_OFFSET = 240
-    var DEFAULT_OFFSET_BOTTOM = 28
-    var DEFAULT_OFFSET_RIGHT = 24
-    var MIN_RADIUS = 0
-    var MAX_RADIUS = 24
-    var DEFAULT_RADIUS = 10
-    var MIN_SHADOW = 0
-    var MAX_SHADOW = 32
-    var DEFAULT_SHADOW = 8
+    var DEFAULT_OFFSET_BOTTOM = 16
     var MIN_VOLUME = 0
     var MAX_VOLUME = 200
     var DEFAULT_VOLUME = 100
 
     function builtinSettings() {
       return {
-        version: 2,
+        version: 3,
         enabled: true,
         sound: true,
         volume: DEFAULT_VOLUME,
         width: DEFAULT_WIDTH,
         height: DEFAULT_HEIGHT,
-        radius: DEFAULT_RADIUS,
-        shadow: DEFAULT_SHADOW,
         offsetBottom: DEFAULT_OFFSET_BOTTOM,
-        offsetRight: DEFAULT_OFFSET_RIGHT,
         dnd: { enabled: false, start: '22:00', end: '08:00' },
       }
     }
@@ -234,17 +212,15 @@ window.__ModuleLoader__.load({
       var fallback = base || defaultSettings()
       if (raw === null || typeof raw !== 'object') return fallback
       var dnd = raw.dnd !== null && typeof raw.dnd === 'object' ? raw.dnd : {}
+      var legacyOffsets = typeof raw.version === 'number' && raw.version < 3
       return {
-        version: 2,
+        version: 3,
         enabled: raw.enabled !== false,
         sound: raw.sound !== false,
         volume: clampNumber(raw.volume, fallback.volume, MIN_VOLUME, MAX_VOLUME),
         width: clampNumber(raw.width, fallback.width, MIN_WIDTH, MAX_WIDTH),
         height: clampNumber(raw.height, fallback.height, MIN_HEIGHT, MAX_HEIGHT),
-        radius: clampNumber(raw.radius, fallback.radius, MIN_RADIUS, MAX_RADIUS),
-        shadow: clampNumber(raw.shadow, fallback.shadow, MIN_SHADOW, MAX_SHADOW),
-        offsetBottom: clampNumber(raw.offsetBottom, fallback.offsetBottom, MIN_OFFSET, MAX_OFFSET),
-        offsetRight: clampNumber(raw.offsetRight, fallback.offsetRight, MIN_OFFSET, MAX_OFFSET),
+        offsetBottom: legacyOffsets ? DEFAULT_OFFSET_BOTTOM : clampNumber(raw.offsetBottom, fallback.offsetBottom, MIN_OFFSET, MAX_OFFSET),
         dnd: {
           enabled: dnd.enabled === true,
           start: validClock(dnd.start, fallback.dnd.start),
@@ -330,6 +306,45 @@ window.__ModuleLoader__.load({
       var date = now instanceof Date ? now : new Date()
       var current = date.getHours() * 60 + date.getMinutes()
       return from < to ? current >= from && current < to : current >= from || current < to
+    }
+
+    function composerAnchor() {
+      try {
+        var seats = document.querySelectorAll('[data-composer-seat]')
+        var seat = null
+        var bestBottom = -Infinity
+        for (var index = 0; index < seats.length; index += 1) {
+          var candidate = seats[index]
+          var candidateRect = candidate.getBoundingClientRect()
+          if (!candidateRect || !(candidateRect.height > 0)) continue
+          if (candidateRect.bottom <= 0 || candidateRect.top >= window.innerHeight) continue
+          if (candidateRect.bottom > bestBottom) {
+            bestBottom = candidateRect.bottom
+            seat = candidate
+          }
+        }
+        if (seat === null) return null
+        var target = seat
+        var input = seat.querySelector('[contenteditable="true"], textarea')
+        if (input !== null && typeof window.getComputedStyle === 'function') {
+          for (var node = input; node !== null && node !== seat.parentElement; node = node.parentElement) {
+            var style = window.getComputedStyle(node)
+            if (style && typeof style.boxShadow === 'string' && style.boxShadow !== 'none' && style.boxShadow !== '') {
+              target = node
+              break
+            }
+            if (node === seat) break
+          }
+        }
+        var rect = target.getBoundingClientRect()
+        if (!rect || !(rect.height > 0)) return null
+        return {
+          right: Math.max(0, window.innerWidth - rect.right),
+          bottom: Math.max(0, window.innerHeight - rect.top),
+        }
+      } catch (error) {
+        return null
+      }
     }
 
     function createTickStore() {
@@ -699,14 +714,12 @@ window.__ModuleLoader__.load({
         height: props.height + 'px',
         boxSizing: 'border-box',
         overflow: 'hidden',
-        background: 'var(--dsw-alias-bg-layer-2)',
+        background: 'var(--dsw-specific-input-major)',
         color: 'var(--dsw-alias-label-primary)',
-        border: '1px solid var(--dsw-alias-border-l1)',
-        borderRadius: (typeof props.radius === 'number' ? props.radius : DEFAULT_RADIUS) + 'px',
-        boxShadow:
-          typeof props.shadow === 'number' && props.shadow > 0
-            ? '0 2px ' + props.shadow + 'px rgba(0, 0, 0, 0.10)'
-            : 'none',
+        border: 0,
+        borderRadius: 'var(--dsw-radius-panel)',
+        '--dsw-elevation-stroke-color': 'var(--dsw-alias-border-l2)',
+        boxShadow: 'var(--dsw-elevation-soft)',
         padding: '11px 12px 12px',
         display: 'flex',
         flexDirection: 'column',
@@ -906,6 +919,44 @@ window.__ModuleLoader__.load({
         var settingsRef = React.useRef(settings)
         settingsRef.current = settings
 
+        var anchorState = React.useState(null)
+        var anchor = anchorState[0]
+        var setAnchor = anchorState[1]
+        var anchorRef = React.useRef(null)
+        var measureRef = React.useRef(null)
+
+        React.useEffect(function () {
+          function apply() {
+            var next = composerAnchor()
+            var prev = anchorRef.current
+            anchorRef.current = next
+            if (prev === next) return
+            if (prev !== null && next !== null && prev.right === next.right && prev.bottom === next.bottom) return
+            setAnchor(next)
+          }
+          measureRef.current = apply
+          apply()
+          window.addEventListener('resize', apply)
+          var observer = null
+          var seat = null
+          try {
+            seat = document.querySelector('[data-composer-seat]')
+          } catch (error) {
+            seat = null
+          }
+          if (seat && typeof window.ResizeObserver === 'function') {
+            observer = new window.ResizeObserver(apply)
+            observer.observe(seat)
+          }
+          var timer = window.setInterval(apply, 1000)
+          return function () {
+            window.removeEventListener('resize', apply)
+            if (observer) observer.disconnect()
+            window.clearInterval(timer)
+            measureRef.current = null
+          }
+        }, [setAnchor])
+
         var rows = props.useSessions(function (snapshot) {
           return snapshot ? snapshot.byId : undefined
         })
@@ -915,6 +966,7 @@ window.__ModuleLoader__.load({
 
         var pushToast = React.useCallback(
           function (toast, forceSound) {
+            if (measureRef.current) measureRef.current()
             keyRef.current += 1
             var entry = Object.assign({ key: 'notice-' + keyRef.current, at: Date.now() }, toast)
             setToasts(function (list) {
@@ -1009,13 +1061,17 @@ window.__ModuleLoader__.load({
         )
 
         if (toasts.length === 0) return null
+        var rightInset = 0
+        var bottomInset = settings.offsetBottom
+        if (anchor !== null) {
+          rightInset = anchor.right
+          bottomInset = anchor.bottom + settings.offsetBottom
+        }
         var cards = toasts.map(function (toast) {
           return h(ToastCard, {
             key: toast.key,
             toast: toast,
             height: settings.height,
-            radius: settings.radius,
-            shadow: settings.shadow,
             onDismiss: dismiss,
             onOpen: function () {
               deps.openSession(toast.sessionId)
@@ -1029,15 +1085,15 @@ window.__ModuleLoader__.load({
             'aria-live': 'polite',
             style: {
               position: 'fixed',
-              bottom: settings.offsetBottom + 'px',
-              right: settings.offsetRight + 'px',
+              bottom: bottomInset + 'px',
+              right: rightInset + 'px',
               zIndex: 80,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'flex-end',
               gap: '8px',
               width: settings.width + 'px',
-              maxWidth: 'calc(100vw - ' + (settings.offsetRight + 12) + 'px)',
+              maxWidth: 'calc(100vw - ' + (rightInset + 12) + 'px)',
               pointerEvents: 'none',
             },
           },
@@ -1332,31 +1388,10 @@ window.__ModuleLoader__.load({
             }),
           ),
           settingRow(
-            t('radius'),
-            t('radiusHint'),
-            sizeControl(t('radius'), settings.radius, MIN_RADIUS, MAX_RADIUS, 2, function (next) {
-              update({ radius: next })
-            }),
-          ),
-          settingRow(
-            t('shadow'),
-            t('shadowHint'),
-            sizeControl(t('shadow'), settings.shadow, MIN_SHADOW, MAX_SHADOW, 2, function (next) {
-              update({ shadow: next })
-            }),
-          ),
-          settingRow(
             t('offsetBottom'),
             t('offsetBottomHint'),
             sizeControl(t('offsetBottom'), settings.offsetBottom, MIN_OFFSET, MAX_OFFSET, 4, function (next) {
               update({ offsetBottom: next })
-            }),
-          ),
-          settingRow(
-            t('offsetRight'),
-            t('offsetRightHint'),
-            sizeControl(t('offsetRight'), settings.offsetRight, MIN_OFFSET, MAX_OFFSET, 4, function (next) {
-              update({ offsetRight: next })
             }),
           ),
         ]
