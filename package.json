@@ -11,7 +11,7 @@
   "bugs": {
     "url": "https://github.com/waddlechef/dsh-session-toast/issues"
   },
-  "description": "Session completion notifications for DeepSeek Harness: an in-app notice, a short chime, and a settings page. · 会话完成通知：应用内提示条、提示音与设置页。",
+  "description": "Session completion notifications for DeepSeek Harness: an in-app notice, a short chime, and a settings page. · 会话通知：应用内提示条、提示音与设置页。",
   "type": "module",
   "icon": "icon.svg",
   "exports": {
