@@ -42,6 +42,16 @@ window.__ModuleLoader__.load({
         dndTo: 'To',
         test: 'Send a test notification',
         testHint: 'Preview it now. Ignores the master switch and quiet hours.',
+        countdownBefore: 'This message will close in ',
+        countdownAfter: ' seconds. ',
+        countdownStop: 'Click to stop',
+        countdownEnd: '.',
+        expand: 'Expand summary',
+        collapse: 'Collapse summary',
+        summaryCollapsed: 'Collapse summary by default',
+        summaryCollapsedHint: 'On starts the summary collapsed; off starts it expanded.',
+        countdown: 'Show countdown bar',
+        countdownHint: 'Off hides the countdown bar; the notice still closes by itself.',
         defaults: 'Defaults',
         defaultsHint: 'Save your current values as this browser\'s defaults, or restore them.',
         saveDefault: 'Save current',
@@ -86,6 +96,16 @@ window.__ModuleLoader__.load({
         dndTo: '结束',
         test: '发送测试通知',
         testHint: '立即预览效果，不受总开关和免打扰限制。',
+        countdownBefore: '此消息将在 ',
+        countdownAfter: ' 秒后关闭，',
+        countdownStop: '点击停止',
+        countdownEnd: '。',
+        expand: '展开摘要',
+        collapse: '收起摘要',
+        summaryCollapsed: '默认收起摘要',
+        summaryCollapsedHint: '开启时摘要默认折叠，关闭时默认展开。',
+        countdown: '显示倒计时条',
+        countdownHint: '关闭后不显示底部倒计时条，通知仍会自动关闭。',
         defaults: '默认值',
         defaultsHint: '把当前设置保存为默认值，之后可一键恢复。',
         saveDefault: '保存为默认',
@@ -161,6 +181,8 @@ window.__ModuleLoader__.load({
         width: DEFAULT_WIDTH,
         height: DEFAULT_HEIGHT,
         offsetBottom: DEFAULT_OFFSET_BOTTOM,
+        summaryCollapsed: true,
+        countdown: true,
         dnd: { enabled: false, start: '22:00', end: '08:00' },
       }
     }
@@ -221,6 +243,8 @@ window.__ModuleLoader__.load({
         width: clampNumber(raw.width, fallback.width, MIN_WIDTH, MAX_WIDTH),
         height: clampNumber(raw.height, fallback.height, MIN_HEIGHT, MAX_HEIGHT),
         offsetBottom: legacyOffsets ? DEFAULT_OFFSET_BOTTOM : clampNumber(raw.offsetBottom, fallback.offsetBottom, MIN_OFFSET, MAX_OFFSET),
+        summaryCollapsed: raw.summaryCollapsed !== false,
+        countdown: raw.countdown !== false,
         dnd: {
           enabled: dnd.enabled === true,
           start: validClock(dnd.start, fallback.dnd.start),
@@ -606,26 +630,45 @@ window.__ModuleLoader__.load({
       return nodes
     }
 
+    var ICON_STROKE = 1.6
+
+    function icon(nodes, options) {
+      var opts = options || {}
+      var size = typeof opts.size === 'number' ? opts.size : 16
+      var props = {
+        width: size,
+        height: size,
+        viewBox: '0 0 16 16',
+        fill: 'none',
+        stroke: typeof opts.color === 'string' ? opts.color : 'currentColor',
+        strokeWidth: ICON_STROKE,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+        'aria-hidden': true,
+        focusable: 'false',
+      }
+      if (opts.style) props.style = opts.style
+      return h.apply(null, ['svg', props].concat([].concat(nodes)))
+    }
+
     function statusIcon(kind, color) {
+      var style = { flex: '0 0 auto', marginTop: '2px' }
       if (kind === 'check') {
-        return h('path', {
-          d: 'M3.3 8.5l3.1 3.1 6.3-7.2',
-          stroke: color,
-          strokeWidth: 2,
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-        })
+        return icon([h('path', { d: 'M3.3 8.5l3.1 3.1 6.3-7.2' })], { color: color, style: style })
       }
       if (kind === 'pause') {
-        return [
-          h('path', { key: 'a', d: 'M6.3 4.6v6.8', stroke: color, strokeWidth: 2, strokeLinecap: 'round' }),
-          h('path', { key: 'b', d: 'M9.7 4.6v6.8', stroke: color, strokeWidth: 2, strokeLinecap: 'round' }),
-        ]
+        return icon(
+          [h('path', { d: 'M6.3 4.6v6.8' }), h('path', { d: 'M9.7 4.6v6.8' })],
+          { color: color, style: style },
+        )
       }
-      return [
-        h('path', { key: 'a', d: 'M8 4.2v4.8', stroke: color, strokeWidth: 2, strokeLinecap: 'round' }),
-        h('circle', { key: 'b', cx: 8, cy: 11.6, r: 1, fill: color }),
-      ]
+      return icon(
+        [
+          h('path', { d: 'M8 4.2v4.8' }),
+          h('circle', { cx: 8, cy: 11.6, r: 1, fill: color, stroke: 'none' }),
+        ],
+        { color: color, style: style },
+      )
     }
 
     var CARD_PAD_BORDER_H = 25
@@ -633,17 +676,24 @@ window.__ModuleLoader__.load({
     var CARD_META_H = 15
     var CARD_GAP = 7
     var CARD_BODY_LINE_H = 20
+    var CARD_STRIP_H = 38
+    var CARD_COLLAPSED_H = 68
 
     function ToastCard(props) {
       var toast = props.toast
-      var hoverState = React.useState(false)
-      var hovered = hoverState[0]
-      var setHovered = hoverState[1]
       var elapsedRef = React.useRef(0)
       var runStartRef = React.useRef(Date.now())
       var bodyRef = React.useRef(null)
       var clippedState = React.useState(false)
       var clipped = clippedState[0]
+      var stoppedState = React.useState(false)
+      var stopped = stoppedState[0]
+      var setStopped = stoppedState[1]
+      var collapsedState = React.useState(props.summaryCollapsed !== false)
+      var collapsed = collapsedState[0]
+      var setCollapsed = collapsedState[1]
+      var tickState = React.useState(0)
+      var tick = tickState[0]
 
       React.useEffect(
         function () {
@@ -658,7 +708,7 @@ window.__ModuleLoader__.load({
 
       React.useEffect(
         function () {
-          if (hovered) return undefined
+          if (stopped) return undefined
           var remaining = Math.max(0, TOAST_LIFETIME_MS - elapsedRef.current)
           var timer = window.setTimeout(function () {
             props.onDismiss(toast.key)
@@ -667,18 +717,37 @@ window.__ModuleLoader__.load({
             window.clearTimeout(timer)
           }
         },
-        [hovered, toast.key, props.onDismiss],
+        [stopped, toast.key, props.onDismiss],
       )
 
-      function beginHover() {
-        if (hovered) return
-        elapsedRef.current += Date.now() - runStartRef.current
-        setHovered(true)
+      React.useEffect(
+        function () {
+          if (stopped) return undefined
+          var timer = window.setInterval(function () {
+            tickState[1](function (value) {
+              return value + 1
+            })
+          }, 500)
+          return function () {
+            window.clearInterval(timer)
+          }
+        },
+        [stopped],
+      )
+
+      function elapsedNow() {
+        return elapsedRef.current + (Date.now() - runStartRef.current)
       }
 
-      function endHover() {
+      function stopCountdown(event) {
+        if (event) {
+          event.stopPropagation()
+          if (typeof event.preventDefault === 'function') event.preventDefault()
+        }
+        if (stopped) return
+        elapsedRef.current = elapsedNow()
         runStartRef.current = Date.now()
-        setHovered(false)
+        setStopped(true)
       }
 
       var error = toast.status === 'error'
@@ -694,24 +763,32 @@ window.__ModuleLoader__.load({
           : 'var(--dsw-alias-state-success-primary)'
       var iconKind = error || warn ? (warn && !error ? 'pause' : 'alert') : 'check'
       var body = error && toast.error ? toast.error : toast.summary
-      var showMeta = props.height >= CARD_PAD_BORDER_H + CARD_HEADER_H + CARD_GAP + CARD_META_H
+      var countdownVisible = props.countdown !== false && !stopped
+      var contentHeight = collapsed ? CARD_COLLAPSED_H : props.height
+      var showMeta = contentHeight >= CARD_PAD_BORDER_H + CARD_HEADER_H + CARD_GAP + CARD_META_H
       var bodySpace =
-        props.height -
+        contentHeight -
         (CARD_PAD_BORDER_H + CARD_HEADER_H + CARD_GAP + (showMeta ? CARD_META_H + CARD_GAP : 0))
-      var bodyLines = Math.max(0, Math.floor(bodySpace / CARD_BODY_LINE_H))
+      var bodyLines = collapsed ? 0 : Math.max(0, Math.floor(bodySpace / CARD_BODY_LINE_H))
       var leaving = toast.leaving === true
-      var meta = [clockText(toast.at)]
+      var metaLeft = []
       if (typeof toast.durationMs === 'number' && toast.durationMs >= 1000) {
-        meta.push(Math.round(toast.durationMs / 1000) + 's')
+        metaLeft.push(Math.round(toast.durationMs / 1000) + 's')
       }
-      if (toast.status !== 'completed' && toast.status !== 'unknown') meta.push(statusText(toast.status))
+      if (toast.status !== 'completed' && toast.status !== 'unknown') metaLeft.push(statusText(toast.status))
+      var metaRight = clockText(toast.at)
+
+      var elapsed = stopped ? elapsedRef.current : elapsedNow()
+      var remainingMs = Math.max(0, TOAST_LIFETIME_MS - elapsed)
+      var remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000))
+      var remainingPct = Math.max(0, Math.min(1, remainingMs / TOAST_LIFETIME_MS)) * 100
 
       var cardStyle = {
         pointerEvents: 'auto',
         cursor: toast.sessionId ? 'pointer' : 'default',
         position: 'relative',
         width: '100%',
-        height: props.height + 'px',
+        height: contentHeight + (countdownVisible ? CARD_STRIP_H : 0) + 'px',
         boxSizing: 'border-box',
         overflow: 'hidden',
         background: 'var(--dsw-specific-input-major)',
@@ -731,9 +808,10 @@ window.__ModuleLoader__.load({
       if (leaving) {
         cardStyle.opacity = 0
         cardStyle.transform = 'translateY(4px)'
-        cardStyle.transition = 'opacity 130ms ease, transform 130ms ease'
+        cardStyle.transition = 'opacity 130ms ease, transform 130ms ease, height 180ms ease'
       } else {
         cardStyle.animation = 'dsh-session-toast-in 160ms ease-out'
+        cardStyle.transition = 'height 180ms ease'
       }
 
       return h(
@@ -752,37 +830,12 @@ window.__ModuleLoader__.load({
                 props.onOpen()
               }
             : undefined,
-          onMouseEnter: function () {
-            beginHover()
-          },
-          onMouseLeave: function () {
-            endHover()
-          },
-          onFocus: function () {
-            beginHover()
-          },
-          onBlur: function (event) {
-
-            if (event.currentTarget.contains(event.relatedTarget)) return
-            endHover()
-          },
           style: cardStyle,
         },
         h(
           'div',
           { style: { display: 'flex', alignItems: 'flex-start', gap: '8px' } },
-          h(
-            'svg',
-            {
-              width: 16,
-              height: 16,
-              viewBox: '0 0 16 16',
-              fill: 'none',
-              'aria-hidden': true,
-              style: { flex: '0 0 auto', marginTop: '2px' },
-            },
-            statusIcon(iconKind, tone),
-          ),
+          statusIcon(iconKind, tone),
           h(
             'span',
             {
@@ -802,11 +855,13 @@ window.__ModuleLoader__.load({
             'button',
             {
               type: 'button',
-              'aria-label': t('close'),
-              tabIndex: hovered ? 0 : -1,
+              'aria-label': collapsed ? t('expand') : t('collapse'),
+              tabIndex: 0,
               onClick: function (event) {
                 event.stopPropagation()
-                props.onDismiss(toast.key)
+                setCollapsed(function (value) {
+                  return !value
+                })
               },
               style: {
                 appearance: 'none',
@@ -814,7 +869,6 @@ window.__ModuleLoader__.load({
                 width: '24px',
                 height: '24px',
                 marginTop: '-4px',
-                marginRight: '-6px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -824,14 +878,46 @@ window.__ModuleLoader__.load({
                 color: 'var(--dsw-alias-label-secondary)',
                 cursor: 'pointer',
                 font: 'inherit',
-                fontSize: '15px',
                 lineHeight: 1,
-                opacity: hovered ? 1 : 0,
-                transition: 'opacity 120ms ease',
-                pointerEvents: hovered ? 'auto' : 'none',
+                padding: 0,
               },
             },
-            '×',
+            icon([h('path', { d: collapsed ? 'M4 6.5l4 4 4-4' : 'M4 9.5l4-4 4 4' })], { size: 16 }),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              'aria-label': t('close'),
+              tabIndex: 0,
+              onClick: function (event) {
+                event.stopPropagation()
+                props.onDismiss(toast.key)
+              },
+              style: {
+                appearance: 'none',
+                flex: '0 0 auto',
+                width: '28px',
+                height: '28px',
+                marginTop: '-6px',
+                marginRight: '-7px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: 0,
+                borderRadius: '7px',
+                background: 'transparent',
+                color: 'var(--dsw-alias-label-secondary)',
+                cursor: 'pointer',
+                font: 'inherit',
+                lineHeight: 1,
+                padding: 0,
+              },
+            },
+            icon(
+              [h('path', { d: 'M4 4l8 8' }), h('path', { d: 'M12 4l-8 8' })],
+              { size: 16 },
+            ),
           ),
         ),
         body && bodyLines > 0
@@ -876,34 +962,109 @@ window.__ModuleLoader__.load({
                 style: {
                   flex: '0 0 auto',
                   marginTop: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
                   color: 'var(--dsw-alias-label-secondary)',
                   fontSize: '11px',
                   lineHeight: CARD_META_H + 'px',
                   opacity: 0.6,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
                 },
               },
-              meta.join(' · '),
+              h(
+                'span',
+                {
+                  style: {
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  },
+                },
+                metaLeft.join(' · '),
+              ),
+              h('span', { style: { flex: '0 0 auto' } }, metaRight),
             )
           : null,
-        h('div', {
-          key: 'progress',
-          'aria-hidden': true,
-          style: {
-            position: 'absolute',
-            left: 0,
-            bottom: 0,
-            height: '2px',
-            width: '100%',
-            background: tone,
-            opacity: 0.5,
-            animation: 'dsh-session-toast-bar ' + TOAST_LIFETIME_MS + 'ms linear forwards',
-            animationDelay: '-' + elapsedRef.current + 'ms',
-            animationPlayState: hovered ? 'paused' : 'running',
-          },
-        }),
+        stopped || !countdownVisible
+          ? null
+          : h(
+              'div',
+              {
+                key: 'strip',
+                role: 'button',
+                tabIndex: 0,
+                onClick: stopCountdown,
+                onKeyDown: function (event) {
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.preventDefault()
+                  stopCountdown(event)
+                },
+                style: {
+                  position: 'relative',
+                  flex: '0 0 auto',
+                  margin: '0 -12px -12px',
+                  marginTop: 'auto',
+                  padding: '8px 12px 10px',
+                  background: 'var(--dsw-alias-interactive-bg-hover)',
+                  borderBottomLeftRadius: 'var(--dsw-radius-panel)',
+                  borderBottomRightRadius: 'var(--dsw-radius-panel)',
+                  color: 'var(--dsw-alias-label-secondary)',
+                  fontSize: '12px',
+                  lineHeight: '16px',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                },
+              },
+              h(
+                'span',
+                null,
+                t('countdownBefore'),
+                h(
+                  'strong',
+                  { style: { fontWeight: 600, color: 'var(--dsw-alias-label-primary)' } },
+                  String(remainingSeconds),
+                ),
+                t('countdownAfter'),
+                h(
+                  'strong',
+                  { style: { fontWeight: 600, color: 'var(--dsw-alias-label-primary)' } },
+                  t('countdownStop'),
+                ),
+                t('countdownEnd'),
+              ),
+              h('div', {
+                key: 'progress',
+                'aria-hidden': true,
+                style: {
+                  position: 'absolute',
+                  left: 0,
+                  bottom: 0,
+                  height: '2px',
+                  width: remainingPct + '%',
+                  background: tone,
+                  opacity: 0.5,
+                  transition: 'width 500ms linear',
+                },
+              }),
+            ),
+        !countdownVisible
+          ? h('div', {
+              key: 'progress',
+              'aria-hidden': true,
+              style: {
+                position: 'absolute',
+                left: 0,
+                bottom: 0,
+                height: '2px',
+                width: remainingPct + '%',
+                background: tone,
+                opacity: 0.5,
+                transition: 'width 500ms linear',
+              },
+            })
+          : null,
       )
     }
 
@@ -1072,6 +1233,8 @@ window.__ModuleLoader__.load({
             key: toast.key,
             toast: toast,
             height: settings.height,
+            summaryCollapsed: settings.summaryCollapsed !== false,
+            countdown: settings.countdown !== false,
             onDismiss: dismiss,
             onOpen: function () {
               deps.openSession(toast.sessionId)
@@ -1249,24 +1412,14 @@ window.__ModuleLoader__.load({
 
     function SettingsIcon(props) {
       var size = props && typeof props.size === 'number' ? props.size : 16
-      return h(
-        'svg',
-        {
-          width: size,
-          height: size,
-          viewBox: '0 0 16 16',
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 1.4,
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-          'aria-hidden': 'true',
-          focusable: 'false',
-        },
-        h('path', {
-          d: 'M8 2.6c-2.3 0-4.1 1.8-4.1 4.1v2.6c0 .7-.3 1.4-.8 1.9l-.6.7c-.4.4-.1 1.1.5 1.1h10c.6 0 .9-.7.5-1.1l-.6-.7c-.5-.5-.8-1.2-.8-1.9V6.7c0-2.3-1.8-4.1-4.1-4.1z',
-        }),
-        h('path', { d: 'M6.6 13.1a1.4 1.4 0 0 0 2.8 0' }),
+      return icon(
+        [
+          h('path', {
+            d: 'M8 2.6c-2.3 0-4.1 1.8-4.1 4.1v2.6c0 .7-.3 1.4-.8 1.9l-.6.7c-.4.4-.1 1.1.5 1.1h10c.6 0 .9-.7.5-1.1l-.6-.7c-.5-.5-.8-1.2-.8-1.9V6.7c0-2.3-1.8-4.1-4.1-4.1z',
+          }),
+          h('path', { d: 'M6.6 13.1a1.4 1.4 0 0 0 2.8 0' }),
+        ],
+        { size: size },
       )
     }
 
@@ -1385,6 +1538,28 @@ window.__ModuleLoader__.load({
             t('heightHint'),
             sizeControl(t('height'), settings.height, MIN_HEIGHT, MAX_HEIGHT, 4, function (next) {
               update({ height: next })
+            }),
+          ),
+          settingRow(
+            t('summaryCollapsed'),
+            t('summaryCollapsedHint'),
+            h(Switch, {
+              checked: settings.summaryCollapsed !== false,
+              label: t('summaryCollapsed'),
+              onChange: function (next) {
+                update({ summaryCollapsed: next })
+              },
+            }),
+          ),
+          settingRow(
+            t('countdown'),
+            t('countdownHint'),
+            h(Switch, {
+              checked: settings.countdown !== false,
+              label: t('countdown'),
+              onChange: function (next) {
+                update({ countdown: next })
+              },
             }),
           ),
           settingRow(
